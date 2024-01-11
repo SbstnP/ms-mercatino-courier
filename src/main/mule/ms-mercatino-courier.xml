@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="d9521b65-e095-4246-8738-f2d53849a8c6" >
+		<http:listener-connection host="0.0.0.0" port="8086" />
+	</http:listener-config>
+	<apikit:config outboundHeadersMapName="outboundHeadersMapName" httpStatusVarName="httpStatus" doc:name="Router" doc:id="a1d504a4-7c34-4517-aa1b-c8c23b60cc57" name="Router" api="resource::cdf1abc7-b4a4-4c3a-81d1-6185b7fff788:api-ms-mercatino-courier:1.0.7:raml:zip:api-ms-mercatino-courier.raml" />
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="e207bb80-1001-43b5-94c2-2e065add8a40" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="password" database="mercatinodb" />
+	</db:config>
+	<flow name="ms-mercatino-courierFlow" doc:id="cfb83349-3a38-4e76-bd43-880753066f67" >
+		<http:listener doc:name="Listener" doc:id="4f569c24-ffba-4e1a-ac56-e17e05b3e3d8" config-ref="HTTP_Listener_config" path="/*"/>
+		<ee:transform doc:name="Payload Copy" doc:id="86472993-81f5-4330-8096-0202a3d7e253" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="PayloadCopy" ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<apikit:router doc:name="APIkit Router" doc:id="73a3369c-34d6-46c7-b0ed-e5da8fc3430d" config-ref="Router"/>
+	</flow>
+	<flow name="get:\Courier:application\json:Router" doc:id="3d649bfb-b897-42a7-b495-ca90a12630ec" >
+		<ee:transform doc:name="Attributes Copy" doc:id="a4e797cd-288a-48ca-a9db-f80607b81ffc" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="AttributesCopy" ><![CDATA[%dw 2.0
+output application/json
+---
+attributes]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<db:select doc:name="Select" doc:id="6b8e8785-13b1-4b83-bd9f-1e992712f4c1" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT *
+FROM couriers
+WHERE Name=:Name]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	"Name":vars.AttributesCopy.queryParams.Name
+}]]]></db:input-parameters>
+		</db:select>
+		<choice doc:name="Choice" doc:id="84648788-e990-41c1-abf7-0cda9edbf72f" >
+			<when expression="#[isEmpty(payload)]" >
+				<ee:transform doc:name="Non trovato" doc:id="9bc15c5a-a90e-46f5-ad0d-dddb424027e2" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+
+{
+	"meta": {
+		"message": "Failed",
+		"code": -1
+	},
+	"data": {
+		"message": "No Courier Found"
+	}
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Courier" doc:id="8553c735-8be9-4090-9d42-22b23b036dee" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"meta": {
+		"message": "Success",
+		"code": 0
+	},
+	"data": {
+		"message": "Courier Found",
+		"User": {
+			"CourierId": payload.CourierId[0],
+			"Name": payload.Name[0],
+			"Price": payload.Price[0],
+			"WorkFlow": payload.WorkFlow[0]
+		}
+	}
+} ]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+	</flow>
+	<flow name="get:\Courier\(CourierId):application\json:Router" doc:id="1d23de6e-f6aa-412b-871b-1917e930eec6" >
+		<ee:transform doc:name="Attributes Copy" doc:id="7d9ce0a0-9bb8-4aff-b8cc-192ec10bc0f7" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="AttributesCopy" ><![CDATA[%dw 2.0
+output application/json
+---
+attributes]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<db:select doc:name="Select" doc:id="1d75a263-9810-44a3-9cfe-f0a8b72de01e" config-ref="Database_Config" >
+			<db:sql ><![CDATA[SELECT *
+FROM couriers
+WHERE CourierId=:CourierId]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	"CourierId":vars.AttributesCopy.uriParams.CourierId
+}]]]></db:input-parameters>
+		</db:select>
+		<choice doc:name="Choice" doc:id="d820a17e-d971-4751-a2d2-33365146868d" >
+			<when expression="#[isEmpty(payload)]" >
+				<ee:transform doc:name="Non trovato" doc:id="6d083d3e-745a-451b-a21e-8ec13e8ebc3a" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+
+{
+	"meta": {
+		"message": "Failed",
+		"code": -1
+	},
+	"data": {
+		"message": "No Courier Found"
+	}
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Courier" doc:id="67801ade-e4e0-426b-a080-5efc540faa67" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"meta": {
+		"message": "Success",
+		"code": 0
+	},
+	"data": {
+		"message": "Courier Found",
+		"User": {
+			"CourierId": payload.CourierId[0],
+			"Name": payload.Name[0],
+			"Price": payload.Price[0],
+			"WorkFlow": payload.WorkFlow[0]
+		}
+	}
+} ]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+	</flow>
+	<flow name="get:\LessWorkLoad:application\json:Router" doc:id="26541afb-1d19-48dc-9af8-d1afe3c2b966" >
+		<ee:transform doc:name="Attributes Copy" doc:id="186ddcf5-8fa7-48a9-b9c8-f44f684d1715" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+attributes]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="AttributesCopy" ><![CDATA[%dw 2.0
+output application/java
+---
+{
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<db:select doc:name="Select" doc:id="d5f3fc63-dcb9-4cc5-8152-5c2c7010464c" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT *
+FROM couriers
+ORDER BY WorkFlow asc, Price asc
+LIMIT 1;]]></db:sql>
+		</db:select>
+		<ee:transform doc:name="Courier" doc:id="8cffd566-e374-494b-ae2a-9f75ead3473c" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"meta": {
+		"message": "Success",
+		"code": 0
+	},
+	"data": {
+		"message": "Courier Found",
+		"User": {
+			"CourierId": payload.CourierId[0],
+			"Name": payload.Name[0],
+			"Price": payload.Price[0],
+			"WorkFlow": payload.WorkFlow[0]
+		}
+	}
+} ]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="post:\Courier:application\json:Router" doc:id="23416e67-5a60-4519-9d23-a6d8ff60cb4a" >
+		<ee:transform doc:name="Attributes Copy" doc:id="df133ee0-17b7-40d4-bacb-7b80b20e05b7" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+attributes]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="AttributesCopy" ><![CDATA[%dw 2.0
+output application/java
+---
+{
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<db:insert doc:name="Insert New Courier" doc:id="ec9f7389-5c11-480c-86d3-6f0096f4c879" config-ref="Database_Config" autoGenerateKeys="true" target="InsertCourier">
+			<db:sql ><![CDATA[INSERT INTO couriers(Price,Name,WorkFlow)
+VALUES(:Price,:Name,:WorkFlow)
+]]></db:sql>
+			<db:input-parameters ><![CDATA[#[%dw 2.0
+output application/java
+---
+{
+	"Name":vars.PayloadCopy.Name,
+	"Price":vars.PayloadCopy.Price,
+	"WorkFlow":0
+}]]]></db:input-parameters>
+		</db:insert>
+		<ee:transform doc:name="Response" doc:id="e4a7c71c-f472-440c-9c58-c8dae78db281" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"meta": {
+		"message": "Success",
+		"code": 0
+	},
+	"data": {
+		"message": "Courier created successfully",
+		"Courier": {
+			"CourierId": vars.InsertCourier.generatedKeys.GENERATED_KEY,
+			"Name": vars.PayloadCopy.Name,
+			"Price": vars.PayloadCopy.Price,
+			"WorkFlow":0
+		}
+	}
+} ]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="patch:\Courier\(CourierId):application\json:Router" doc:id="c68b06a9-93a6-4e2c-a320-979d6d784c1d" >
+		<ee:transform doc:name="Attributes Copy" doc:id="9b697107-74a8-4b72-9a4f-bee9bf745e22" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="AttributesCopy" ><![CDATA[%dw 2.0
+output application/json
+---
+attributes]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<db:update doc:name="Update" doc:id="e9936683-5b09-4303-8795-5c1e3a9a9b39" config-ref="Database_Config" autoGenerateKeys="true">
+			<db:sql ><![CDATA[UPDATE couriers
+SET Name=:Name, Price=:Price, WorkFlow=:WorkFlow
+WHERE CourierId=:CourierId]]></db:sql>
+			<db:input-parameters ><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+	"Name":vars.PayloadCopy.Name,
+	"Price":vars.PayloadCopy.Price,
+	"WorkFlow":vars.PayloadCopy.WorkFlow,
+	"CourierId":vars.AttributesCopy.uriParams.CourierId
+}]]]></db:input-parameters>
+		</db:update>
+		<ee:transform doc:name="Response" doc:id="5fe2a127-ed85-4836-8a86-13347442ec66">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"meta": {
+		"message": "Success",
+		"code": 0
+	},
+	"data": {
+		"message": "Courier updated successfully",
+		"Courier": {
+			"CourierId": vars.AttributesCopy.uriParams.CourierId,
+			"Name": vars.PayloadCopy.Name,
+			"Price": vars.PayloadCopy.Price,
+			"WorkFlow":vars.PayloadCopy.WorkFlow
+		}
+	}
+} ]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
